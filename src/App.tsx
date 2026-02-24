@@ -50,26 +50,17 @@ const callGeminiAPI = async (contents: any[], systemInstruction?: string, provid
     throw new Error("Vui lòng nhập API Key trước khi bắt đầu");
   }
 
-  // 1. The Fallback List: Endpoints to test in exact order
-  const baseEndpoints = [
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
-    'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent',
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
-  ];
-
-  // 2. Auto-Discovery Logic: Use saved working endpoint first if available
-  const savedBaseUrl = localStorage.getItem('gemini_working_base_url');
-  const endpointsToTry = savedBaseUrl 
-    ? [savedBaseUrl, ...baseEndpoints.filter(u => u !== savedBaseUrl)]
-    : baseEndpoints;
-
+  // Use strictly v1beta as requested to support system_instruction
+  const models = ['gemini-1.5-flash', 'gemini-1.5-flash-latest'];
   let lastError: any = null;
 
-  for (const baseUrl of endpointsToTry) {
-    const url = `${baseUrl}?key=${apiKey}`;
+  for (const model of models) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    
     const payload: any = { contents };
     if (systemInstruction) {
-      payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+      // Correct field name for v1beta REST API is system_instruction (snake_case)
+      payload.system_instruction = { parts: [{ text: systemInstruction }] };
     }
 
     try {
@@ -79,11 +70,12 @@ const callGeminiAPI = async (contents: any[], systemInstruction?: string, provid
         body: JSON.stringify(payload)
       });
 
+      const data = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error?.message || `HTTP Error: ${response.status}`;
+        const errorMessage = data.error?.message || `HTTP Error: ${response.status}`;
         
-        // If 404 or "Requested entity was not found", try next URL silently
+        // If 404 or "not found", try next model silently
         if (response.status === 404 || 
             errorMessage.toLowerCase().includes("not found") || 
             errorMessage.includes("Requested entity was not found")) {
@@ -91,20 +83,18 @@ const callGeminiAPI = async (contents: any[], systemInstruction?: string, provid
             continue;
         }
 
-        // For other errors (like 400 Invalid Key), stop and throw
+        // For other errors (like 403 Forbidden or 400 Invalid Key), stop and throw
         throw new Error(errorMessage);
       }
 
-      // 200 OK: Success! Save this working endpoint for future requests
-      localStorage.setItem('gemini_working_base_url', baseUrl);
-      return await response.json();
+      // 200 OK: Success!
+      return data;
     } catch (error: any) {
       lastError = error;
       
-      // If network error or "not found", continue to next endpoint
+      // If network error or "not found", continue to next model
       if (error.message.includes("Failed to fetch") || 
-          error.message.toLowerCase().includes("not found") || 
-          error.message.includes("Requested entity was not found")) {
+          error.message.toLowerCase().includes("not found")) {
           continue;
       }
 
@@ -112,8 +102,7 @@ const callGeminiAPI = async (contents: any[], systemInstruction?: string, provid
     }
   }
 
-  // 3. Final Error Handling: Only show if ALL endpoints fail
-  throw new Error("Không thể kết nối với máy chủ AI. Vui lòng kiểm tra lại cấu hình API Key hoặc VPN.");
+  throw new Error(`Không thể kết nối với máy chủ AI. Lỗi cuối cùng: ${lastError?.message || "Unknown error"}`);
 };
 
 // Types
@@ -279,7 +268,7 @@ export default function App() {
     }
     
     localStorage.setItem('gemini_api_key', cleanKey);
-    setApiKey(cleanKey);
+    setApiKey(cleanKey); // Update state to hide warning
     setApiKeyInput(cleanKey);
     alert("Đã lưu API Key thành công!");
   };
