@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gia sư Toán Lớp 6 - AI</title>
+    
+    <!-- Cấu hình MathJax để hiển thị công thức Toán học đẹp mắt -->
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        :root { --primary-color: #2563eb; --bg-color: #f3f4f6; --chat-bg: #ffffff; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-color); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; height: 100vh; box-sizing: border-box; }
+        
+        .container { width: 100%; max-width: 800px; display: flex; flex-direction: column; height: 100%; gap: 15px; }
+        
+        /* Box nhập API Key */
+        .api-box { background: var(--chat-bg); padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); display: flex; gap: 10px; }
+        .api-box input { flex: 1; padding: 10px 15px; border: 1px solid #d1d5db; border-radius: 8px; outline: none; font-size: 14px; }
+        .api-box button { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .api-box button:hover { background: #059669; }
+
+        /* Khung Chat */
+        .chat-box { flex: 1; background: var(--chat-bg); border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; }
+        .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+        
+        .msg { max-width: 85%; padding: 12px 16px; border-radius: 12px; line-height: 1.6; font-size: 15px; word-wrap: break-word; }
+        .msg p { margin: 0 0 10px 0; }
+        .msg p:last-child { margin: 0; }
+        
+        .msg.user { align-self: flex-end; background: var(--primary-color); color: white; border-bottom-right-radius: 2px; }
+        .msg.ai { align-self: flex-start; background: #f3f4f6; color: #1f2937; border-bottom-left-radius: 2px; border: 1px solid #e5e7eb; }
+        .msg.error { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; font-size: 13px; }
+
+        /* Khung nhập tin nhắn */
+        .input-box { display: flex; padding: 15px; border-top: 1px solid #e5e7eb; background: var(--chat-bg); gap: 10px; }
+        .input-box input { flex: 1; padding: 12px 15px; border: 1px solid #d1d5db; border-radius: 25px; outline: none; font-size: 15px; }
+        .input-box input:focus { border-color: var(--primary-color); }
+        .input-box button { background: var(--primary-color); color: white; border: none; padding: 10px 25px; border-radius: 25px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .input-box button:hover { background: #1d4ed8; }
+        .input-box button:disabled { background: #9ca3af; cursor: not-allowed; }
+
+        .typing { font-style: italic; color: #6b7280; font-size: 14px; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: .5; } 50% { opacity: 1; } 100% { opacity: .5; } }
+        
+        /* Hiển thị phiên bản để chống kẹt cache */
+        .version-tag { text-align: center; font-size: 12px; color: #9ca3af; padding-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="api-box">
+        <input type="password" id="api-key" placeholder="Dán Gemini API Key mới nhất của bạn vào đây...">
+        <button onclick="saveKey()">💾 Lưu Key</button>
+    </div>
+
+    <div class="chat-box">
+        <div class="messages" id="chat-messages">
+            <div class="msg ai">
+                👋 Chào em! Thầy là Gia sư Toán. Em đang gặp khó khăn với bài toán lớp 6 nào, hãy gõ vào bên dưới nhé!
+            </div>
+        </div>
+        
+        <div class="input-box">
+            <input type="text" id="user-input" placeholder="Ví dụ: Tính tổng S = 1.2 + 2.3 + ... + 99.100" onkeypress="handleEnter(event)">
+            <button id="send-btn" onclick="sendMessage()">Gửi</button>
+        </div>
+    </div>
+    
+    <div class="version-tag">Phiên bản: 2.0 (Ổn định - Sử dụng cổng v1beta)</div>
+</div>
+
+<script>
+    // 1. Quản lý API Key
+    window.onload = () => {
+        const savedKey = localStorage.getItem('gemini_api_key');
+        if (savedKey) document.getElementById('api-key').value = savedKey;
+    };
+
+    function saveKey() {
+        const key = document.getElementById('api-key').value.trim();
+        if (key) {
+            localStorage.setItem('gemini_api_key', key);
+            alert('✅ Đã lưu API Key thành công!');
+        } else {
+            alert('⚠️ Vui lòng nhập Key trước khi lưu!');
+        }
+    }
+
+    // 2. Xử lý gửi tin nhắn
+    function handleEnter(e) {
+        if (e.key === 'Enter') sendMessage();
+    }
+
+    async function sendMessage() {
+        const inputField = document.getElementById('user-input');
+        const chatContainer = document.getElementById('chat-messages');
+        const sendBtn = document.getElementById('send-btn');
+        
+        const message = inputField.value.trim();
+        
+        // CƠ CHẾ CHỐNG KẸT KEY: Luôn ưu tiên Key đang hiển thị trên ô nhập liệu
+        const inputKey = document.getElementById('api-key').value.trim();
+        const savedKey = localStorage.getItem('gemini_api_key');
+        const apiKey = inputKey || savedKey;
+
+        // Tự động lưu nếu có Key mới được dán vào mà người dùng quên bấm "Lưu Key"
+        if (inputKey && inputKey !== savedKey) {
+            localStorage.setItem('gemini_api_key', inputKey);
+        }
+
+        if (!message) return;
+        
+        if (!apiKey) {
+            appendMessage('error', '❌ LỖI: Bạn chưa cung cấp API Key!');
+            return;
+        }
+
+        // Hiện tin nhắn người dùng
+        appendMessage('user', message);
+        inputField.value = '';
+        
+        // Hiện trạng thái Typing
+        const typingId = 'typing-' + Date.now();
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'msg ai typing';
+        typingDiv.id = typingId;
+        typingDiv.innerText = '✍️ Thầy đang giải bài...';
+        chatContainer.appendChild(typingDiv);
+        scrollToBottom();
+
+        // Khóa nút Gửi
+        sendBtn.disabled = true;
+
+        try {
+            // === CỔNG KẾT NỐI V1BETA CHUẨN XÁC ===
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            
+            const payload = {
+                contents: [{
+                    role: "user",
+                    parts: [{ text: message }]
+                }],
+                systemInstruction: {
+                    parts: [{ text: "Bạn là một gia sư Toán cấp 2 xuất sắc, đặc biệt chuyên về toán lớp 6 tại Việt Nam. Hãy giải bài toán người dùng đưa ra một cách chi tiết, từng bước, thân thiện và dễ hiểu cho học sinh 11 tuổi. BẮT BUỘC sử dụng định dạng LaTeX (kẹp giữa dấu $ hoặc $$) cho MỌI công thức, phân số, phép tính toán học." }]
+                },
+                generationConfig: {
+                    temperature: 0.2
+                }
+            };
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            // Xóa hiệu ứng typing
+            document.getElementById(typingId).remove();
+
+            // Xử lý lỗi từ Google chi tiết nhất
+            if (!response.ok) {
+                const errorMsg = data.error ? data.error.message : `Lỗi HTTP ${response.status}`;
+                throw new Error(errorMsg);
+            }
+
+            // Trích xuất văn bản trả lời
+            if (data.candidates && data.candidates[0].content.parts[0].text) {
+                const aiResponse = data.candidates[0].content.parts[0].text;
+                appendMessage('ai', aiResponse);
+                
+                // Kích hoạt MathJax an toàn
+                if (window.MathJax) {
+                    MathJax.typesetPromise().catch(err => console.error("Lỗi vẽ công thức Toán:", err));
+                }
+            } else {
+                throw new Error("API kết nối thành công nhưng không trả về câu trả lời hợp lệ.");
+            }
+
+        } catch (error) {
+            const typingEl = document.getElementById(typingId);
+            if (typingEl) typingEl.remove();
+            
+            appendMessage('error', `❌ LỖI TỪ MÁY CHỦ GOOGLE:<br>${error.message}<br><br><small><i>Gợi ý: Nếu lỗi ghi là "API key not valid", hãy kiểm tra lại Key. Nếu lỗi mạng, hãy bật VPN.</i></small>`);
+            console.error("Chi tiết lỗi:", error);
+        } finally {
+            sendBtn.disabled = false;
+            scrollToBottom();
+        }
+    }
+
+    // Hàm phụ trợ UI
+    function appendMessage(sender, text) {
+        const chatContainer = document.getElementById('chat-messages');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `msg ${sender}`;
+        
+        // Xử lý xuống dòng
+        let formattedText = text.replace(/\n/g, '<br>');
+        msgDiv.innerHTML = formattedText;
+        
+        chatContainer.appendChild(msgDiv);
+        scrollToBottom();
+    }
+
+    function scrollToBottom() {
+        const chatContainer = document.getElementById('chat-messages');
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+</script>
+
+</body>
+</html>
